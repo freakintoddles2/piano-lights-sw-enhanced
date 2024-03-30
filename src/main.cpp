@@ -25,49 +25,38 @@
 #include <Arduino.h>
 #include <FastLED.h>
 #include <MIDI.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266mDNS.h>
+#include <WiFiUdp.h>
+#include <ArduinoOTA.h>
 
-#define DEBUG 0
+// wifi creds
+const char *ssid = "The 33 Network";
+const char *password = "1010101010";
 
-#if DEBUG
-#include <AltSoftSerial.h>
-#endif
+static const int NUM_LEDS = 64;
+static const int START_LED = 0;
 
-static const int NUM_LEDS = 75;
-static const int START_LED = 1;
+// Specify LED pins being used
+#define DATA_PIN D7
+#define CLOCK_PIN D5
 
-// Hardware SPI of Arduino Uno
-#define DATA_PIN 11
-#define CLOCK_PIN 13
-
-// MIDI Shield pins
-static const uint8_t PIN_BTN0 = 2;
-static const uint8_t PIN_BTN1 = 3;
-static const uint8_t PIN_BTN2 = 4;
-
-static const uint8_t PIN_POT0 = 0;
-static const uint8_t PIN_POT1 = 1;
-
-static const uint8_t PIN_LED_GRN = 6;
-static const uint8_t PIN_LED_RED = 7;
-// LEDs are active low
-static const uint8_t LED_ON = LOW;
-static const uint8_t LED_OFF = HIGH;
-
-static const uint8_t PIN_SOFT_RX = 8;
-static const uint8_t PIN_SOFT_TX = 9;
-
-#if DEBUG
-AltSoftSerial debug;
-#endif
-
+// Set up led array & define constants
+static const int saturation = 255; //code below does not change this
+int brightness = 255; //this is default value but will change for each keypress
 CRGB leds[NUM_LEDS];
 
-static const int NUM_KEYS = 88;
-bool keys[NUM_KEYS];
+// Set up keys array & pedal based on how many keys on the keyboard
+static const int NUM_KEYS = 76; // update to match how many keys in your keyboard
+bool keys[NUM_KEYS]; // Declaraion of keys array, will store t/f for each key to track which keys are current pressed
+byte velocities[NUM_KEYS]; // Declaration of velocities array, how hard the keys are being pressed
 byte pedal = 0;
+bool sustain = false;  // will keep track of whether the sustain pedal is being pressed or not
 
+// this created the MIDI instance as required by the library
 MIDI_CREATE_DEFAULT_INSTANCE();
 
+// declare the MIDI functions
 static void handleNoteOn(byte channel, byte note, byte velocity);
 static void handleNoteOff(byte channel, byte note, byte velocity);
 static void handleControlChange(byte channel, byte number, byte value);
@@ -91,122 +80,117 @@ long my_map(long x, long in_min, long in_max, long out_min, long out_max)
 
 void setup()
 {
-#if DEBUG
-    pinMode(PIN_SOFT_RX, INPUT);
-    pinMode(PIN_SOFT_TX, OUTPUT);
-    debug.begin(9600);
-    debug.println("Piano Lights Running");
-#endif
+    // initialize the wifi
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(ssid, password);
 
-    pinMode(PIN_BTN0, INPUT_PULLUP);
-    pinMode(PIN_BTN1, INPUT_PULLUP);
-    pinMode(PIN_BTN2, INPUT_PULLUP);
-
-    pinMode(PIN_LED_GRN, OUTPUT);
-    pinMode(PIN_LED_RED, OUTPUT);
-    digitalWrite(PIN_LED_GRN, LED_ON);
-    digitalWrite(PIN_LED_RED, LED_OFF);
-
+    // initialize the leds
     FastLED.addLeds<SK9822, DATA_PIN, CLOCK_PIN>(leds, NUM_LEDS);
-    FastLED.setBrightness(84);
+    FastLED.setBrightness(80); // 1-255, this is the max brightness limiter for all other operations in the loop
 
+    // initialize midi listening
     MIDI.begin(MIDI_CHANNEL_OMNI);
     MIDI.setHandleNoteOn(handleNoteOn);
     MIDI.setHandleNoteOff(handleNoteOff);
     MIDI.setHandleControlChange(handleControlChange);
 
-    for (int i = 0; i < NUM_KEYS; i++) {
+    // initialize piano keys all to 'off' (false)
+    for (int i = 0; i < NUM_KEYS; i++)
+    {
         keys[i] = false;
     }
 
-    for (int i = 0; i < 3; i++) {
-        digitalWrite(PIN_LED_RED, LED_ON);
-        delay(250);
-        digitalWrite(PIN_LED_RED, LED_OFF);
-        delay(250);
-    }                                                                                  
-}
+    // Initialize the Arduino OTA library for wireless updates
+    ArduinoOTA.onStart([]() {});
+    ArduinoOTA.onEnd([]() {});
+    ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {});
+    ArduinoOTA.onError([](ota_error_t error)
+                       {
+    if (error == OTA_AUTH_ERROR) ;
+    else if (error == OTA_BEGIN_ERROR);
+    else if (error == OTA_CONNECT_ERROR);
+    else if (error == OTA_RECEIVE_ERROR);
+    else if (error == OTA_END_ERROR); });
 
-void loop1()
-{
-    digitalWrite(PIN_LED_RED, LED_ON);
-    delay(500);
-    digitalWrite(PIN_LED_RED, LED_OFF);
-    delay(500);
+    ArduinoOTA.begin();
 }
 
 void loop()
 {
+    //listen for OTA requests and handle as needed
+    ArduinoOTA.handle();
+
+    //listen for MIDI inputs and handle as needed
     MIDI.read();
 
-#if 0
-    int pot0 = analogRead(PIN_POT0);
-    int saturation = my_map(pot0, 0, 1023, 0, 255);
+    EVERY_N_MILLISECONDS(6){blur1d(leds, NUM_LEDS, 20);} //fade them quickly
 
-    int pot1 = analogRead(PIN_POT1);
-    int brightness = my_map(pot1, 0, 1023, 0, 255);
-#else
-    int saturation = 255;
-    int brightness = 255;
-#endif
+    //If the sustain pedal is being pressed, fade the leds slowly, otherwise, more quickly
+    if (sustain == true)
+    {
+        EVERY_N_MILLISECONDS(100){blur1d(leds, NUM_LEDS, 100);} //fade them slowly - blur1d also fades leds
+    }
+    else
+    {
+        EVERY_N_MILLISECONDS(6){blur1d(leds, NUM_LEDS, 20);} //fade them quickly
+    }
 
-    // First, clear the existing led values
-    FastLED.clear();
-    bool anyKeyDown = false;
-    for (int i = 0; i < NUM_KEYS; i++) {
-        if (keys[i]) {
-            int led = my_map(i, 0, NUM_KEYS-1, START_LED, NUM_LEDS-1);
-            int hue = my_map(i, 0, NUM_KEYS-1, 0, 255);
+    // Now, light up any keys that are currently pressed (as determined by handleNoteOn and handleNoteOff)
+    for (int i = 0; i < NUM_KEYS; i++)
+    {
+        if (keys[i])
+        {
+            int led = my_map(i, 0, NUM_KEYS - 1, START_LED, NUM_LEDS - 1);
+            int hue = my_map(i, 0, NUM_KEYS - 1, 0, 255);
+
+            // Calculate brightness based on velocity
+            byte velocity = velocities[i];
+
+            // Calculate brightness based on velocity
+            brightness = constrain(exp(velocity / 127.0 * log(255.0 / 40.0)) * 40.0, 40.0, 255.0);
+
+            // Set the color and brightness for all leds corresponding to the keys currently being pressed
             leds[led] = CHSV(hue, saturation, brightness);
-            anyKeyDown = true;
         }
     }
 
-    digitalWrite(PIN_LED_RED, anyKeyDown? LED_ON : LED_OFF);
     FastLED.show();
 }
 
-/// Note A0 MIDI value
-static const byte MIN_PIANO_MIDI_NOTE = 21;
-/// Note C8 MIDI value
-static const byte MAX_PIANO_MIDI_NOTE = 108;
+/// Note A0 MIDI value (not sure exactly how to get this, just used trial and error)
+static const byte MIN_PIANO_MIDI_NOTE = 28;
+/// Note C8 MIDI value (not sure exactly how to get this, just used trial and error)
+static const byte MAX_PIANO_MIDI_NOTE = 116;
 
+// Do things when a key is pressed
 static void handleNoteOn(byte channel, byte note, byte velocity)
 {
-    if ((note >= MIN_PIANO_MIDI_NOTE) && (note <= MAX_PIANO_MIDI_NOTE)) {
-        keys[note - MIN_PIANO_MIDI_NOTE] = true;
+    //update the keys array with which keys are pressed/on
+    keys[note - MIN_PIANO_MIDI_NOTE] = true;
 
-#if DEBUG
-        debug.print("Note On:  ");
-        debug.println(note);
-#endif
-    }
+    //update the velocities array with the velocity of the key press
+    velocities[note - MIN_PIANO_MIDI_NOTE] = velocity;
 }
 
+// Do things when a key is released
 static void handleNoteOff(byte channel, byte note, byte velocity)
 {
-    if ((note >= MIN_PIANO_MIDI_NOTE) && (note <= MAX_PIANO_MIDI_NOTE)) {
+    // if the note is between the range of notes
+    if ((note >= MIN_PIANO_MIDI_NOTE) && (note <= MAX_PIANO_MIDI_NOTE))
+    {
+        // update the corresponding value in keys array to 'false' which means they are not being pressed anymore
         keys[note - MIN_PIANO_MIDI_NOTE] = false;
-
-#if DEBUG
-        debug.print("Note Off: ");
-        debug.println(note);
-#endif
     }
 }
 
 static void handleControlChange(byte channel, byte number, byte value)
 {
-#if DEBUG
-    debug.print("CC: ");
-    debug.print(channel);
-    debug.print(", ");
-    debug.print(number);
-    debug.print(", ");
-    debug.println(value);
-#endif
-    
-    if (channel == 64) {
-        pedal = number;
+    // channel 64 = damper / sustain pedal - set sustain to true if pressed, back to false when not
+    if( number == 64 ){
+        if( value >= 64 ){
+            sustain = true;
+        } else {
+            sustain = false;
+        }
     }
 }
