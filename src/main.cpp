@@ -31,8 +31,8 @@
 #include <ArduinoOTA.h>
 
 // wifi creds
-const char *ssid = "The 33 Network";
-const char *password = "1010101010";
+const char *ssid = "ssid";
+const char *password = "password";
 
 static const int NUM_LEDS = 64;
 static const int START_LED = 0;
