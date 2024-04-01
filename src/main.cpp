@@ -1,6 +1,6 @@
 /* Updated by Todd Meyer in March 2024 to add more expressiveness to the light and add support for the sustain pedal
  *
- * Original code is copyright (c) 2022 Dave Dribin
+ * Based on original code copyright (c) 2022 Dave Dribin
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
