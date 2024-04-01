@@ -1,4 +1,5 @@
-/* Updated by Todd Meyer in March 2024 to add more expressiveness to the light and add support for the sustain pedal
+/* Updated by Todd Meyer in March 2024 to simplify for my use case, adapt for the esp8266, 
+ * add more expressiveness to the light effect (fading, spread, key velocity) and add support for the sustain pedal.
  *
  * Based on original code copyright (c) 2022 Dave Dribin
  *
