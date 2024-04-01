@@ -45,16 +45,15 @@ static const int START_LED = 0;
 
 // Set up led array & define constants
 static const int saturation = 255; //code below does not change this
-int brightness = 255; //this is default value but will change for each keypress
+int brightness = 255; // this is default value but will change for each keypress
 CRGB leds[NUM_LEDS];
-int hueshift = 0;
+int hueshift = 0; // used to shift the hues of the keys over time as the piano is being played
 
 
 // Set up keys array & pedal based on how many keys on the keyboard
 static const int NUM_KEYS = 76; // update to match how many keys in your keyboard
 bool keys[NUM_KEYS]; // Declaraion of keys array, will store t/f for each key to track which keys are current pressed
 byte velocities[NUM_KEYS]; // Declaration of velocities array, how hard the keys are being pressed
-byte pedal = 0;
 bool sustain = false;  // will keep track of whether the sustain pedal is being pressed or not
 
 // this created the MIDI instance as required by the library
@@ -148,7 +147,7 @@ void loop()
         {
             int led = my_map(i, 0, NUM_KEYS - 1, START_LED, NUM_LEDS - 1);
             int hue = my_map(i, 0, NUM_KEYS - 1, 0, 255);
-            hue = (hue + hueshift) % 256;
+            hue = (hue + hueshift) % 256; //slowly shift the key colors/hues over time, can be removed if you want them to stay fixed
 
             // Calculate brightness based on velocity
             byte velocity = velocities[i];
@@ -190,6 +189,7 @@ static void handleNoteOff(byte channel, byte note, byte velocity)
     }
 }
 
+// Do things when the sustain pedal is pressed
 static void handleControlChange(byte channel, byte number, byte value)
 {
     // channel 64 = damper / sustain pedal - set sustain to true if pressed, back to false when not
