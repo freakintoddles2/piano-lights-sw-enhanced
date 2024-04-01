@@ -31,7 +31,7 @@
 #include <ArduinoOTA.h>
 
 // wifi creds
-const char *ssid = "ssid";
+const char *ssid = "your_ssid";
 const char *password = "password";
 
 static const int NUM_LEDS = 64;
@@ -45,6 +45,8 @@ static const int START_LED = 0;
 static const int saturation = 255; //code below does not change this
 int brightness = 255; //this is default value but will change for each keypress
 CRGB leds[NUM_LEDS];
+int hueshift = 0;
+
 
 // Set up keys array & pedal based on how many keys on the keyboard
 static const int NUM_KEYS = 76; // update to match how many keys in your keyboard
@@ -86,7 +88,7 @@ void setup()
 
     // initialize the leds
     FastLED.addLeds<SK9822, DATA_PIN, CLOCK_PIN>(leds, NUM_LEDS);
-    FastLED.setBrightness(80); // 1-255, this is the max brightness limiter for all other operations in the loop
+    FastLED.setBrightness(180); // 1-255, this is the max brightness limiter for all other operations in the loop
 
     // initialize midi listening
     MIDI.begin(MIDI_CHANNEL_OMNI);
@@ -122,17 +124,19 @@ void loop()
 
     //listen for MIDI inputs and handle as needed
     MIDI.read();
-
-    EVERY_N_MILLISECONDS(6){blur1d(leds, NUM_LEDS, 20);} //fade them quickly
-
-    //If the sustain pedal is being pressed, fade the leds slowly, otherwise, more quickly
+    
+    // Spread/blur the light out to more leds than just 1 per key. This uses the blur1d() function from fastLED library
+    // If the sustain pedal is being pressed, fade the leds more slowly and spread the light more, otherwise fade them more quickly
+    // This makes the light more closely match the duration and fade of the audible sound
     if (sustain == true)
     {
-        EVERY_N_MILLISECONDS(100){blur1d(leds, NUM_LEDS, 100);} //fade them slowly - blur1d also fades leds
+        EVERY_N_MILLISECONDS(100){blur1d(leds, NUM_LEDS, 85);} //fade them slowly and also blur them more - blur1d also fades leds
+        EVERY_N_MILLISECONDS(500){hueshift = (hueshift + 1) % 256;} //shift the hues gradually as sustain is used (for fun)
+
     }
     else
     {
-        EVERY_N_MILLISECONDS(6){blur1d(leds, NUM_LEDS, 20);} //fade them quickly
+        EVERY_N_MILLISECONDS(6){blur1d(leds, NUM_LEDS, 25);} //fade them quickly
     }
 
     // Now, light up any keys that are currently pressed (as determined by handleNoteOn and handleNoteOff)
@@ -142,6 +146,7 @@ void loop()
         {
             int led = my_map(i, 0, NUM_KEYS - 1, START_LED, NUM_LEDS - 1);
             int hue = my_map(i, 0, NUM_KEYS - 1, 0, 255);
+            hue = (hue + hueshift) % 256;
 
             // Calculate brightness based on velocity
             byte velocity = velocities[i];
