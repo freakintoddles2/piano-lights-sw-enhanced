@@ -131,13 +131,13 @@ void loop()
     // This makes the light more closely match the duration and fade of the audible sound
     if (sustain == true)
     {
-        EVERY_N_MILLISECONDS(100){blur1d(leds, NUM_LEDS, 85);} //fade them slowly and also blur them more - blur1d also fades leds
+        EVERY_N_MILLISECONDS(100){blur1d(leds, NUM_LEDS, 85);} //fade them slowly and also blur them more - blur1d also fades leds. adjust last number in blur1d 0-255 to control blur/spread amount.
         EVERY_N_MILLISECONDS(500){hueshift = (hueshift + 1) % 256;} //shift the hues gradually as sustain is used (for fun)
 
     }
     else
     {
-        EVERY_N_MILLISECONDS(6){blur1d(leds, NUM_LEDS, 25);} //fade them quickly
+        EVERY_N_MILLISECONDS(6){blur1d(leds, NUM_LEDS, 25);} //when pedal is not is use, fade them quickly, spread less. adjust last number in blur1d 0-255 to control blur/spread amount.
     }
 
     // Now, light up any keys that are currently pressed (as determined by handleNoteOn and handleNoteOff)
